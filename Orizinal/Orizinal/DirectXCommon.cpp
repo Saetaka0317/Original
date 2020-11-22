@@ -44,7 +44,72 @@ void DirectXCommon::Initialize(Window* win)
 		assert(0);
 	}
 }
+void DirectXCommon::PreDraw()
+{
+	// バックバッファの番号を取得（2つなので0番か1番）
+	UINT bbIndex = swapchain->GetCurrentBackBufferIndex();
 
+	// リソースバリアを変更（表示状態→描画対象）
+	commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffers[bbIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	// レンダーターゲットビュー用ディスクリプタヒープのハンドルを取得
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvH = CD3DX12_CPU_DESCRIPTOR_HANDLE(rtvHeaps->GetCPUDescriptorHandleForHeapStart(), bbIndex, device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+	// 深度ステンシルビュー用デスクリプタヒープのハンドルを取得
+	CD3DX12_CPU_DESCRIPTOR_HANDLE dsvH = CD3DX12_CPU_DESCRIPTOR_HANDLE(dsvHeap->GetCPUDescriptorHandleForHeapStart());
+	// レンダーターゲットをセット
+	commandList->OMSetRenderTargets(1, &rtvH, false, &dsvH);
+
+	// 全画面クリア
+	ClearRenderTarget();
+	// 深度バッファクリア
+	ClearDepthBuffer();
+
+	// ビューポートの設定
+	commandList->RSSetViewports(1, &CD3DX12_VIEWPORT(0.0f, 0.0f, WinApp::window_width, WinApp::window_height));
+	// シザリング矩形の設定
+	commandList->RSSetScissorRects(1, &CD3DX12_RECT(0, 0, WinApp::window_width, WinApp::window_height));
+}
+
+void DirectXCommon::PostDraw()
+{
+	// リソースバリアを変更（描画対象→表示状態）
+	UINT bbIndex = swapchain->GetCurrentBackBufferIndex();
+	commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(backBuffers[bbIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+	// 命令のクローズ
+	commandList->Close();
+
+	// コマンドリストの実行
+	ID3D12CommandList* cmdLists[] = { commandList.Get() }; // コマンドリストの配列
+	commandQueue->ExecuteCommandLists(1, cmdLists);
+
+	// コマンドリストの実行完了を待つ
+	commandQueue->Signal(fence.Get(), ++fenceVal);
+	if (fence->GetCompletedValue() != fenceVal) {
+		HANDLE event = CreateEvent(nullptr, false, false, nullptr);
+		fence->SetEventOnCompletion(fenceVal, event);
+		WaitForSingleObject(event, INFINITE);
+		CloseHandle(event);
+	}
+
+	commandAllocator->Reset(); // キューをクリア
+	commandList->Reset(commandAllocator.Get(), nullptr);	// 再びコマンドリストを貯める準備
+
+															// バッファをフリップ
+	swapchain->Present(1, 0);
+}
+
+void DirectXCommon::ClearRenderTarget()
+{
+	UINT bbIndex = swapchain->GetCurrentBackBufferIndex();
+
+	// レンダーターゲットビュー用ディスクリプタヒープのハンドルを取得
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvH = CD3DX12_CPU_DESCRIPTOR_HANDLE(rtvHeaps->GetCPUDescriptorHandleForHeapStart(), bbIndex, device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV));
+
+	// 全画面クリア        Red   Green Blue  Alpha
+	float clearColor[] = { 0.1f,0.25f, 0.5f,0.0f }; // 青っぽい色
+	commandList->ClearRenderTargetView(rtvH, clearColor, 0, nullptr);
+}
 bool DirectXCommon::InitializeDXGIDevice()
 {
 	HRESULT result = S_FALSE;

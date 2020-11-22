@@ -19,6 +19,29 @@ private://エイリアス
 	template <class T>using ComPtr = Microsoft::WRL::ComPtr<T>;
 public://メンバ関数
 	void Initialize(Window* win);
+	/// <summary>
+	/// 描画前処理
+	/// </summary>
+	void PreDraw();
+
+	/// <summary>
+	/// 描画後処理
+	/// </summary>
+	void PostDraw();
+
+	/// <summary>
+	/// レンダーターゲットのクリア
+	/// </summary>
+	void ClearRenderTarget();
+
+	/// <summary>
+	/// 深度バッファのクリア
+	/// </summary>
+	void ClearDepthBuffer();
+	//デバイスの取得
+	ID3D12Device* GetDevice() { return device.Get(); }
+	//描画コマンドリストの取得
+	ID3D12GraphicsCommandList* GetCommandList() { return commandList.Get(); }
 
 public://メンバ変数
 	//ウィンドウ管理
@@ -94,6 +117,6 @@ private://メンバ関数
 	//そこでフェンスはGPU側の処理が終わったか監視してくれる
 	//フェンスを使うことで初めて同期処理ができるようになる
 #pragma endregion
-	//フェンスを生成
-	bool CreateFence();
+	//フェンスの生成
+	bool CreateFence();	
 };
